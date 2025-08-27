@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Player Controller</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .play-btn { background-color: #4CAF50; color: white; }
+        .pause-btn { background-color: #FF9800; color: white; }
+        .stop-btn { background-color: #f44336; color: white; }
+        .lock-btn { 
+            background-color: #2196F3; 
+            color: white; 
+        }
+        .lock-btn.locked {
+            background-color: #ff4444;
+        }
+        button:hover {
+            opacity: 0.9;
+            transform: translateY(-2px);
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+            font-family: monospace;
+        }
+        .lock-status {
+            text-align: center;
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .locked-status {
+            background-color: #ffebee;
+            color: #c62828;
+            border: 2px solid #ffcdd2;
+        }
+        .unlocked-status {
+            background-color: #e8f5e8;
+            color: #2e7d32;
+            border: 2px solid #c8e6c9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 Video Player Controller</h1>
+        
+        <!-- Lock Status Indicator -->
+        <div id="lockStatus" class="lock-status unlocked-status">
+            🔓 Player is UNLOCKED
+        </div>
+        
+        <div class="controls">
+            <button class="play-btn" onclick="sendCommand('play')">▶️ Play</button>
+            <button class="pause-btn" onclick="sendCommand('pause')">⏸️ Pause</button>
+            <button class="stop-btn" onclick="sendCommand('stop')">⏹️ Stop</button>
+            <button id="lockButton" class="lock-btn" onclick="toggleLock()">🔒 Lock Player</button>
+        </div>
+
+        <div class="controls">
+            <button onclick="getStatus()">🔄 Refresh Status</button>
+            <button onclick="resetPlayer()">🔄 Reset Player</button>
+        </div>
+
+        <div class="status">
+            <h3>Current Status:</h3>
+            <pre id="statusResult">Click "Refresh Status" to see current state</pre>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8080/api/player';
+        let isLocked = false;
+
+        // Initialize lock status on page load
+        async function initializeLockStatus() {
+            try {
+                const response = await fetch(`${API_BASE}/lock-status`);
+                isLocked = await response.json();
+                updateLockUI();
+            } catch (error) {
+                console.error('Error getting lock status:', error);
+            }
+        }
+
+        // Toggle lock state
+        async function toggleLock() {
+            try {
+                const response = await fetch(`${API_BASE}/toggle-lock`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    isLocked = !isLocked;
+                    updateLockUI();
+                    showResult(isLocked ? '🔒 Player locked' : '🔓 Player unlocked');
+                }
+            } catch (error) {
+                showResult('❌ Error toggling lock:', error.message);
+            }
+        }
+
+        // Update UI based on lock state
+        function updateLockUI() {
+            const lockBtn = document.getElementById('lockButton');
+            const lockStatus = document.getElementById('lockStatus');
+            const controlBtns = document.querySelectorAll('.play-btn, .pause-btn, .stop-btn');
+
+            // Update lock button
+            if (isLocked) {
+                lockBtn.innerHTML = '🔓 Unlock Player';
+                lockBtn.classList.add('locked');
+                lockStatus.innerHTML = '🔒 Player is LOCKED - Controls disabled';
+                lockStatus.className = 'lock-status locked-status';
+            } else {
+                lockBtn.innerHTML = '🔒 Lock Player';
+                lockBtn.classList.remove('locked');
+                lockStatus.innerHTML = '🔓 Player is UNLOCKED - Controls enabled';
+                lockStatus.className = 'lock-status unlocked-status';
+            }
+
+            // Enable/disable control buttons
+            controlBtns.forEach(btn => {
+                btn.disabled = isLocked;
+            });
+        }
+
+        async function sendCommand(command) {
+            if (isLocked) {
+                showResult('❌ Player is locked! Unlock first to use controls.');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/${command}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                showResult(`✅ ${command.toUpperCase()} successful:`, data);
+            } catch (error) {
+                showResult('❌ Error:', error.message);
+            }
+        }
+
+        async function getStatus() {
+            try {
+                const response = await fetch(`${API_BASE}/status`);
+                const data = await response.json();
+                showResult('📊 Current Status:', data);
+            } catch (error) {
+                showResult('❌ Error getting status:', error);
+            }
+        }
+
+        async function resetPlayer() {
+            if (isLocked) {
+                showResult('❌ Player is locked! Unlock first to reset.');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/reset`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                showResult('🔄 Player reset:', data);
+            } catch (error) {
+                showResult('❌ Error resetting:', error);
+            }
+        }
+
+        function showResult(title, data) {
+            const resultDiv = document.getElementById('statusResult');
+            if (data) {
+                resultDiv.innerHTML = `${title}\n${JSON.stringify(data, null, 2)}`;
+            } else {
+                resultDiv.innerHTML = title;
+            }
+        }
+
+        // Load initial status and lock state when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            getStatus();
+            initializeLockStatus();
+        });
+    </script>
+</body>
+</html>
